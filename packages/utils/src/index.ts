@@ -63,6 +63,7 @@ import hasWidget from './hasWidget.ts';
 import {
   ariaDescribedByIds,
   buttonId,
+  dateElementId,
   descriptionId,
   errorId,
   examplesId,
@@ -160,6 +161,7 @@ export {
   createSchemaUtils,
   DateElement,
   dataURItoBlob,
+  dateElementId,
   dateRangeOptions,
   deepEquals,
   descriptionId,
