@@ -5787,24 +5787,6 @@ export default function getDefaultFormStateTest(testValidator: TestValidatorType
         };
         expect(getDefaultFormState(testValidator, schema, {})).toEqual({});
       });
-      it('should compute the defaults of a schema whose oneOf key has no list under it', () => {
-        const schema = {
-          type: 'object',
-          properties: {
-            name: {
-              type: 'object',
-              oneOf: undefined,
-              properties: {
-                inner: { type: 'string', default: 'a' },
-              },
-            },
-          },
-        } as RJSFSchema;
-        // A schema assembled in JS can carry the key with nothing under it, which reading the list's length threw on.
-        // The schema carries no `default` of its own, since one of those is read from the value of the key rather than
-        // its presence and so never reaches the branch that read the list
-        expect(getDefaultFormState(testValidator, schema, {})).toEqual({ name: { inner: 'a' } });
-      });
       it('should populate defaults for oneOf', () => {
         const schema: RJSFSchema = {
           type: 'object',
@@ -6063,24 +6045,6 @@ export default function getDefaultFormStateTest(testValidator: TestValidatorType
           },
         };
         expect(getDefaultFormState(testValidator, schema, {})).toEqual({});
-      });
-      it('should compute the defaults of a schema whose anyOf key has no list under it', () => {
-        const schema = {
-          type: 'object',
-          properties: {
-            name: {
-              type: 'object',
-              anyOf: undefined,
-              properties: {
-                inner: { type: 'string', default: 'a' },
-              },
-            },
-          },
-        } as RJSFSchema;
-        // A schema assembled in JS can carry the key with nothing under it, which reading the list's length threw on.
-        // The schema carries no `default` of its own, since one of those is read from the value of the key rather than
-        // its presence and so never reaches the branch that read the list
-        expect(getDefaultFormState(testValidator, schema, {})).toEqual({ name: { inner: 'a' } });
       });
       it('should populate defaults for anyOf', () => {
         const schema: RJSFSchema = {

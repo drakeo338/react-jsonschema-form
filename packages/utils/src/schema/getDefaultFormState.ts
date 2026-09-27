@@ -410,9 +410,9 @@ export function computeDefaults<
         uiSchemaDefinitions,
       }),
     ) as T[];
-  } else if (Array.isArray(schema[ONE_OF_KEY])) {
+  } else if (ONE_OF_KEY in schema) {
     const { oneOf, ...remaining } = schema;
-    if (oneOf.length === 0) {
+    if (oneOf!.length === 0) {
       return undefined;
     }
     const discriminator = getDiscriminatorFieldFromSchema<S>(schema);
@@ -433,11 +433,11 @@ export function computeDefaults<
       discriminator,
       customMergeAllOf,
     );
-    schemaToCompute = mergeSchemas(remaining, oneOf[oneOfIndex] as S) as S;
+    schemaToCompute = mergeSchemas(remaining, oneOf![oneOfIndex] as S) as S;
     branchUiSchema = getOptionUiSchema<T, S, F>(uiSchema, ONE_OF_KEY, oneOfIndex);
-  } else if (Array.isArray(schema[ANY_OF_KEY])) {
+  } else if (ANY_OF_KEY in schema) {
     const { anyOf, ...remaining } = schema;
-    if (anyOf.length === 0) {
+    if (anyOf!.length === 0) {
       return undefined;
     }
     const discriminator = getDiscriminatorFieldFromSchema<S>(schema);
@@ -450,7 +450,7 @@ export function computeDefaults<
       discriminator,
       customMergeAllOf,
     );
-    schemaToCompute = mergeSchemas(remaining, anyOf[anyOfIndex] as S) as S;
+    schemaToCompute = mergeSchemas(remaining, anyOf![anyOfIndex] as S) as S;
     branchUiSchema = getOptionUiSchema<T, S, F>(uiSchema, ANY_OF_KEY, anyOfIndex);
   } else if (shouldPopulateAllOfDefaults(schema, defaultFormStateBehavior) && getSchemaType<S>(schema) !== 'object') {
     // `allOf` on an object schema is already resolved by `getObjectDefaults()`. On any other schema
