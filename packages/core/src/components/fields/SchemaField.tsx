@@ -120,10 +120,12 @@ function inferSelectType<S extends StrictRJSFSchema = RJSFSchema>(schema: S): { 
  * @param registry - The registry from which fields and templates are obtained
  * @param isSelectSchema - Whether the `schema` is a `oneOf`/`anyOf` that represents a select
  * @returns - The `Field` component that renders the actual field data, whether it is the fallback UI taking the schema
- *            over — because the schema has no field of its own, or because a union was diverted to it — and whether
- *            `SchemaFieldRender` renders the option selector for an `anyOf`/`oneOf` of its own. The two travel together
- *            because each is decided from the other: the fallback UI takes the options over only when that selector
- *            would not render them, and it renders them itself once it has
+ *            over — because a union or a guessed type was diverted to it, or because the schema has no field of its own
+ *            and no `anyOf`/`oneOf` to supply the types — and whether the schema has a non-select `anyOf`/`oneOf` for
+ *            `SchemaFieldRender` to render an option selector of. That one is decided here so that both this function
+ *            and `SchemaFieldRender` read the same answer, and both read it against the fallback UI: when the fallback
+ *            UI has the schema it renders those options itself, within the value field for the type it has pinned, so
+ *            the selector `SchemaFieldRender` would render is left unrendered even though the schema calls for one
  */
 function getFieldComponent<
   T = unknown,
@@ -143,7 +145,7 @@ function getFieldComponent<
    * besides the fallback UI that can render the value of a schema with no field of its own
    */
   const rendersOptionSelector =
-    Boolean(schema.anyOf || schema.oneOf) &&
+    Boolean(schema[ANY_OF_KEY] || schema[ONE_OF_KEY]) &&
     !isSelectSchema &&
     !(Boolean(field) && uiOptions.fieldReplacesAnyOrOneOf === true);
   if (typeof field === 'function') {
