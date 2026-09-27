@@ -147,23 +147,29 @@ function getFieldComponent<
    */
   const rendersFallbackUiAs = (FieldComponent: Field<T, S, F>) =>
     FieldComponent === fields.FallbackField && Boolean(globalFormOptions.useFallbackUiForUnsupportedType);
+  /** The field a `ui:field` names, or `undefined` for a name no field is registered under, which resolves to nothing */
+  let namedField: Field<T, S, F> | undefined;
+  if (typeof field === 'function') {
+    namedField = field;
+  } else if (typeof field === 'string' && field in fields) {
+    namedField = fields[field];
+  }
   /** A `ui:field` that resolves is the field `ui:fieldReplacesAnyOrOneOf` asks the options to give way to. A name no
    * field is registered under resolves to nothing, so there is nothing to give way to and the options are rendered,
-   * which is what lets the form be completed: without them an object union loses the `properties` of every option
+   * which is what lets the form be completed: without them an object union loses the `properties` of every option.
+   * One naming the fallback UI is not a field the options can give way to either: it renders them itself, against the
+   * schema with its type pinned, so they are rendered whatever the directive asks for
    */
-  const fieldResolves = typeof field === 'function' || (typeof field === 'string' && field in fields);
+  const optionsGiveWayToField =
+    namedField !== undefined && !rendersFallbackUiAs(namedField) && uiOptions.fieldReplacesAnyOrOneOf === true;
   /** An `anyOf`/`oneOf` that represents a select is rendered by the field for the schema's type as one control, rather
    * than by an option selector
    */
-  const rendersOptionSelector =
-    hasOptions && !isSelectSchema && !(fieldResolves && uiOptions.fieldReplacesAnyOrOneOf === true);
-  if (typeof field === 'function') {
-    return { FieldComponent: field, rendersFallbackUi: rendersFallbackUiAs(field), rendersOptionSelector };
-  }
-  if (typeof field === 'string' && field in fields) {
+  const rendersOptionSelector = hasOptions && !isSelectSchema && !optionsGiveWayToField;
+  if (namedField !== undefined) {
     return {
-      FieldComponent: fields[field],
-      rendersFallbackUi: rendersFallbackUiAs(fields[field]),
+      FieldComponent: namedField,
+      rendersFallbackUi: rendersFallbackUiAs(namedField),
       rendersOptionSelector,
     };
   }
