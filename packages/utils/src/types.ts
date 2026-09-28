@@ -148,15 +148,26 @@ export interface DefaultFormStateBehavior {
  */
 export type CustomMergeAllOf<S extends StrictRJSFSchema = RJSFSchema> = (schema: S) => S;
 
+/** The settings of a `SchemaContext` that decide which sub-schemas a form validates against, which `schemaParser()`
+ * parses a schema with; they must match the ones the form's `SchemaContext` holds, so the parsed sub-schemas are the
+ * ones the form validates against
+ */
+export interface SchemaParserOptions<S extends StrictRJSFSchema = RJSFSchema> {
+  /** Optional function that allows for custom merging of `allOf` schemas */
+  readonly customMergeAllOf?: CustomMergeAllOf<S>;
+}
+
 /** The settings every `@rjsf/utils` schema function resolves schemas with. They generally do not change across a
  * `Form`, so the schema functions take them as one object and pass that object along to every schema function they
  * call, which keeps a `customMergeAllOf` or `defaultFormStateBehavior` from being dropped partway down a call chain.
  */
-export interface SchemaContext<T = any, S extends StrictRJSFSchema = RJSFSchema, F extends FormContextType = any> {
+export interface SchemaContext<
+  T = any,
+  S extends StrictRJSFSchema = RJSFSchema,
+  F extends FormContextType = any,
+> extends SchemaParserOptions<S> {
   /** An implementation of the `ValidatorType` interface used to validate data against schemas */
   readonly validator: ValidatorType<T, S, F>;
-  /** Optional function that allows for custom merging of `allOf` schemas */
-  readonly customMergeAllOf?: CustomMergeAllOf<S>;
   /** Optional configuration object, if provided, allows users to override default form state behavior */
   readonly defaultFormStateBehavior?: DefaultFormStateBehavior;
 }

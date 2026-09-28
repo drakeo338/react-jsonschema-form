@@ -175,6 +175,9 @@ export default class ATAPrecompiledValidator<
       transformErrors,
       uiSchema,
       this.suppressDuplicateFiltering,
+      // The `isValid()` calls made while computing the `customValidate` defaults check their root schema without the
+      // form's context, so the root is this validator's own, not the `schema` the form resolved with its context
+      this.rootSchema,
     );
   }
 

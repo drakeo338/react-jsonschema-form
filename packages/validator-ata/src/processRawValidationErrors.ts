@@ -194,6 +194,7 @@ export default function processRawValidationErrors<
   transformErrors?: ErrorTransformer<T, S, F>,
   uiSchema?: UiSchema<T, S, F>,
   suppressDuplicateFiltering?: SuppressDuplicateFilteringType,
+  rootSchema: S = schema,
 ) {
   const { validationError: invalidSchemaError } = rawErrors;
   let errors = transformRJSFValidationErrors<T, S, F>(rawErrors.errors, uiSchema, suppressDuplicateFiltering, schema);
@@ -225,7 +226,7 @@ export default function processRawValidationErrors<
   const newFormData = getDefaultFormState<T, S, F>(context, {
     schema,
     formData,
-    rootSchema: schema,
+    rootSchema,
     includeUndefinedValues: true,
     uiSchema,
   }) as T;

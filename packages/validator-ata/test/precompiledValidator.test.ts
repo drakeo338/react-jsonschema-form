@@ -466,4 +466,22 @@ describe('ATAPrecompiledValidator with a customMergeAllOf', () => {
     expect(resolvedRootSchema.title).toBe('Custom merge');
     expect(validator.validateFormData(context, formData, resolvedRootSchema).errors).toEqual([]);
   });
+  it('computes the customValidate defaults against the root schema the form resolved', () => {
+    // The `oneOf` makes computing the defaults call `isValid()` with the resolved root schema as its root
+    const oneOfSchema: RJSFSchema = {
+      ...allOfSchema,
+      properties: { choice: { oneOf: [{ const: 'a' }, { const: 'b' }] } },
+    };
+    const validator = new ATAPrecompiledValidator(
+      loadModule(compileSchemaValidatorsCode(oneOfSchema)) as ValidatorFunctions,
+      oneOfSchema,
+    );
+    const context = { validator, customMergeAllOf };
+    const formData = { name: 'x', choice: 'b' };
+    const resolvedRootSchema = retrieveSchema(context, oneOfSchema, oneOfSchema, formData);
+    const customValidate = vi.fn((_formData, errors) => errors);
+
+    expect(validator.validateFormData(context, formData, resolvedRootSchema, customValidate).errors).toEqual([]);
+    expect(customValidate).toHaveBeenCalledWith(formData, expect.anything(), undefined, expect.anything());
+  });
 });

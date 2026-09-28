@@ -201,6 +201,7 @@ export function transformRJSFValidationErrors<
  * @param [transformErrors] - An optional function that is used to transform errors after AJV validation
  * @param [uiSchema] - An optional uiSchema that is passed to `transformErrors` and `customValidate`
  * @param [suppressDuplicateFiltering] - Controls which duplicate filtering is suppressed; see `filterDuplicateErrors`
+ * @param [rootSchema=schema] - The root schema the defaults handed to `customValidate` are computed with
  */
 export default function processRawValidationErrors<
   T = any,
@@ -215,6 +216,7 @@ export default function processRawValidationErrors<
   transformErrors?: ErrorTransformer<T, S, F>,
   uiSchema?: UiSchema<T, S, F>,
   suppressDuplicateFiltering?: SuppressDuplicateFilteringType,
+  rootSchema: S = schema,
 ) {
   const { validationError: invalidSchemaError } = rawErrors;
   let errors = transformRJSFValidationErrors<T, S, F>(rawErrors.errors, uiSchema, suppressDuplicateFiltering, schema);
@@ -246,7 +248,7 @@ export default function processRawValidationErrors<
   const newFormData = getDefaultFormState<T, S, F>(context, {
     schema,
     formData,
-    rootSchema: schema,
+    rootSchema,
     includeUndefinedValues: true,
     uiSchema,
   }) as T;
