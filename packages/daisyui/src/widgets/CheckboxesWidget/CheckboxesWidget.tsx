@@ -32,7 +32,6 @@ export default function CheckboxesWidget<
   label,
   hideLabel,
   readonly,
-  required,
   onChange,
   onFocus,
   onBlur,
@@ -113,7 +112,6 @@ export default function CheckboxesWidget<
               name={htmlName || id}
               value={enumOptionValueEncoder(option.value, index, optionValueFormat)}
               checked={isChecked(option)}
-              required={required}
               disabled={disabled || readonly}
               data-index={index}
               onChange={handleChange}

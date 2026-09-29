@@ -68,10 +68,12 @@ import {
   errorId,
   examplesId,
   expandButtonId,
+  fieldLabelId,
   helpId,
   optionalControlsId,
   optionId,
   titleId,
+  triggerValueId,
 } from './idGenerators.ts';
 import isConstant from './isConstant.ts';
 import isCustomWidget from './isCustomWidget.ts';
@@ -178,6 +180,7 @@ export {
   examplesId,
   expandButtonId,
   ErrorSchemaBuilder,
+  fieldLabelId,
   findSchemaDefinition,
   flattenGroupedOptions,
   getChangedFields,
@@ -265,6 +268,7 @@ export {
   fieldPathToList,
   fieldPathToName,
   toPath,
+  triggerValueId,
   unsetByPath,
   unwrapErrorHandler,
   useAltDateWidgetProps,
