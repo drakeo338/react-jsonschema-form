@@ -252,9 +252,9 @@ function SchemaFieldRender<
     return inferSelectType<S>(schemaUtils.retrieveSchema(_schema, formData));
   }, [_schema, formData, schemaUtils]);
   // An inferred widget is only a default, so a widget the caller named through either spelling is written back
-  // unchanged. `ui:widget` is always the key that carries it because `getDisplayLabel()` reads only that spelling to
-  // decide a boolean keeps its label, and spreading leaves an existing key where the caller put it, so the order
-  // `getUiOptions()` reduces in — and with it `ui:widget` against `ui:options.widget` — is untouched either way.
+  // unchanged. `ui:widget` is the key that carries it because that is where the inferred default has to land, and
+  // spreading leaves an existing key where the caller put it, so the order `getUiOptions()` reduces in — and with it
+  // `ui:widget` against `ui:options.widget` — is untouched either way.
   // Kept apart from the schema above so that the resolved `uiSchema` keeps its identity as the form data changes
   const uiSchema = useMemo(() => {
     if (!inferredWidget) {

@@ -24,6 +24,7 @@ export default function RadioWidget<
 >({
   id,
   htmlName,
+  name,
   options,
   value,
   label,
@@ -86,7 +87,7 @@ export default function RadioWidget<
   return (
     <div className='form-control'>
       {/* Display the options in a vertical flex layout for better spacing */}
-      <div className='flex flex-col gap-2 mt-1' {...getGroupProps({ id, label, hideLabel, role: 'radiogroup' })}>
+      <div className='flex flex-col gap-2 mt-1' {...getGroupProps({ id, label, name, hideLabel, role: 'radiogroup' })}>
         {enumOptions?.map((option, index) => (
           <label key={option.value} className='flex items-center cursor-pointer gap-2'>
             <input

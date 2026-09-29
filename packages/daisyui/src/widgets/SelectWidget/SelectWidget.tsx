@@ -9,14 +9,17 @@ import type {
   WidgetProps,
 } from '@rjsf/utils';
 import {
+  ariaDescribedByIds,
   enumOptionSelectedValue,
   enumOptionValueDecoder,
   enumOptionValueEncoder,
+  fieldLabelId,
   getOptionValueFormat,
   groupEnumOptions,
   isEnumOptionsGroup,
   logUnsupportedDefaultForEnum,
   SelectedOptionDescription,
+  triggerValueId,
 } from '@rjsf/utils';
 
 /** The `SelectWidget` component renders a select input with DaisyUI styling
@@ -40,6 +43,7 @@ export default function SelectWidget<
   id,
   options,
   label,
+  hideLabel,
   disabled,
   placeholder,
   readonly,
@@ -125,6 +129,7 @@ export default function SelectWidget<
   ]
     .flat()
     .filter((v) => v !== '');
+  const hasValue = selectedValues.length > 0;
 
   const optionsList: EnumOptionsType<S>[] =
     enumOptions ||
@@ -192,9 +197,22 @@ export default function SelectWidget<
           }`}
           onBlur={handleBlur}
           onFocus={handleFocus}
+          aria-describedby={ariaDescribedByIds(id)}
+          /* The select-only combobox naming: the label that names this button, then the button's own value. A name
+             from outside an element replaces its contents, so the selected option would otherwise be dropped from
+             everything a screen reader says about the control. Referencing the label by id rather than asking whether
+             one was rendered leaves the button no label points at — the `oneOf` option selector, which the template
+             labels the field's own control instead — named by its own value, since a reference to a missing element
+             contributes nothing.
+
+             Claimed only where the template renders the label this points at, so a widget labelled by something else
+             keeps the name that gives it: the `additionalProperties` key select, whose own label already spells the
+             key out. And only where the button displays a value, since the text it falls back to otherwise is the
+             label itself, which would have the label announced twice. */
+          aria-labelledby={hasValue && !hideLabel ? `${fieldLabelId(id)} ${triggerValueId(id)}` : undefined}
         >
-          <span className='truncate'>
-            {selectedValues.length > 0
+          <span id={triggerValueId(id)} className='truncate'>
+            {hasValue
               ? selectedValues.map((index) => optionsList[Number(index)]?.label).join(', ')
               : placeholder || label || 'Select...'}
           </span>
