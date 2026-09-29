@@ -118,8 +118,7 @@ function inferSelectType<S extends StrictRJSFSchema = RJSFSchema>(schema: S): { 
  * @param schema - The schema from which to obtain the type
  * @param uiOptions - The UI Options that may affect the component decision
  * @param registry - The registry from which fields and templates are obtained
- * @param hasOptions - Whether the `schema` lists `anyOf` or `oneOf` options
- * @param isSelectSchema - Whether the `schema` is a `oneOf`/`anyOf` that represents a select
+ * @param hasOptions - Whether the `schema` lists `anyOf` or `oneOf` options for something to render
  * @returns - The `Field` component that renders the actual field data, whether that component is the fallback UI, and
  *            whether the `schema` has options for `SchemaFieldRender` to render an option selector of. Both flags are
  *            decided here so that this function and `SchemaFieldRender` read the same answers, and `SchemaFieldRender`
@@ -136,14 +135,17 @@ function getFieldComponent<
   uiOptions: UIOptionsType<T, S, F>,
   registry: Registry<T, S, F>,
   hasOptions: boolean,
-  isSelectSchema: boolean,
 ): { FieldComponent: Field<T, S, F>; rendersFallbackUi: boolean; rendersOptionSelector: boolean } {
   const { field, widget } = uiOptions;
-  const { fields, globalFormOptions } = registry;
+  const { fields, globalFormOptions, schemaUtils } = registry;
+  /** An `anyOf`/`oneOf` whose options are all constants pins the value, so the field for the schema's type renders them
+   * as one select. `isSelect()` resolves the schema on every call, so it is only asked about a schema that has options
+   */
+  const isSelectSchema = hasOptions && schemaUtils.isSelect(schema);
   /** `FallbackField` is the fallback UI only with the opt-in on; without it the component renders the unsupported field
-   * template, which takes no `anyOf`/`oneOf` over. Read from the component rather than from the name that reached it,
-   * so that every way of arriving at it — the type the schema names having no field, the opt-in diverting a union, a
-   * `ui:field` naming it — gives the same answer
+   * template, which takes no `anyOf`/`oneOf` over. Takes the component rather than a name, since the several ways of
+   * arriving at it — the type the schema names having no field, the opt-in diverting a union, a `ui:field` naming it —
+   * reach it under different names and must all give the same answer
    */
   const rendersFallbackUiAs = (FieldComponent: Field<T, S, F>) =>
     FieldComponent === fields.FallbackField && Boolean(globalFormOptions.useFallbackUiForUnsupportedType);
@@ -151,7 +153,7 @@ function getFieldComponent<
   let namedField: Field<T, S, F> | undefined;
   if (typeof field === 'function') {
     namedField = field;
-  } else if (typeof field === 'string' && field in fields) {
+  } else if (typeof field === 'string' && Object.hasOwn(fields, field)) {
     namedField = fields[field];
   }
   /** A `ui:field` that resolves is the field `ui:fieldReplacesAnyOrOneOf` asks the options to give way to. A name no
@@ -160,18 +162,15 @@ function getFieldComponent<
    * One naming the fallback UI is not a field the options can give way to either: it renders them itself, against the
    * schema with its type pinned, so they are rendered whatever the directive asks for
    */
+  const namedFieldRendersFallbackUi = namedField !== undefined && rendersFallbackUiAs(namedField);
   const optionsGiveWayToField =
-    namedField !== undefined && !rendersFallbackUiAs(namedField) && uiOptions.fieldReplacesAnyOrOneOf === true;
+    namedField !== undefined && !namedFieldRendersFallbackUi && uiOptions.fieldReplacesAnyOrOneOf === true;
   /** An `anyOf`/`oneOf` that represents a select is rendered by the field for the schema's type as one control, rather
    * than by an option selector
    */
   const rendersOptionSelector = hasOptions && !isSelectSchema && !optionsGiveWayToField;
   if (namedField !== undefined) {
-    return {
-      FieldComponent: namedField,
-      rendersFallbackUi: rendersFallbackUiAs(namedField),
-      rendersOptionSelector,
-    };
+    return { FieldComponent: namedField, rendersFallbackUi: namedFieldRendersFallbackUi, rendersOptionSelector };
   }
 
   const schemaType = getSchemaType(schema);
@@ -208,7 +207,7 @@ function getFieldComponent<
   if (isDivertedToFallbackUi) {
     componentName = 'FallbackField';
   }
-  if (schemaId && schemaId in fields) {
+  if (schemaId && Object.hasOwn(fields, schemaId)) {
     componentName = schemaId;
   }
 
@@ -232,7 +231,7 @@ function getFieldComponent<
   // `FallbackField`, since nothing else can render it. The flag is read from the component the name resolves to, so it
   // describes that way in as well as the diverted one, and it is read after the return above so that the options of
   // such a schema still supply its types
-  const FieldComponent = componentName in fields ? fields[componentName] : fields.FallbackField;
+  const FieldComponent = Object.hasOwn(fields, componentName) ? fields[componentName] : fields.FallbackField;
   return { FieldComponent, rendersFallbackUi: rendersFallbackUiAs(FieldComponent), rendersOptionSelector };
 }
 
@@ -345,19 +344,15 @@ function SchemaFieldRender<
   );
   const FieldHelpTemplate = getTemplate<'FieldHelpTemplate', T, S, F>('FieldHelpTemplate', registry, uiOptions);
   const FieldErrorTemplate = getTemplate<'FieldErrorTemplate', T, S, F>('FieldErrorTemplate', registry, uiOptions);
-  // Read by value rather than by the key's presence, the way `isSelect()` and `resolveAllReferences()` read the same two
-  // keywords: a key carrying no list is not a list of options to choose between, and testing the key would have
-  // `isSelect()` resolve the schema a second time to find that out. `isSelect()` resolves it on every call, so compute
-  // this once, and only for the `oneOf`/`anyOf` it applies to
+  // A key carrying no list of options is not a list to choose between, which is how `isSelect()` and
+  // `resolveAllReferences()` read the same two keywords
   const hasOptions = Array.isArray(schema[ANY_OF_KEY]) || Array.isArray(schema[ONE_OF_KEY]);
-  const isSelectSchema = hasOptions && schemaUtils.isSelect(schema);
 
   const { FieldComponent, rendersFallbackUi, rendersOptionSelector } = getFieldComponent<T, S, F>(
     schema,
     uiOptions,
     registry,
     hasOptions,
-    isSelectSchema,
   );
 
   const isDeprecated = Boolean(schema.deprecated);
