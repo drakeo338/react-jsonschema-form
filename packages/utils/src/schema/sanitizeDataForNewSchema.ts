@@ -221,21 +221,24 @@ function sanitizeDataForSelectedOption<
   const oldOption = resolvedOldOptions[switched ? oldIndex : index];
   // When the score flipped, the fields of the option the old data singled out are kept, but what its own conditional
   // declared only for the old data is stale, as `MultiSchemaField` shows that option without it once the score flips
-  // back, unless the selected option declares it too. Only those keys are cleared, sanitizing the data against that
-  // option would also replace the values it does not accept, such as a const or an enum of the selected option
-  const base =
-    !switched && oldIndex !== undefined && oldIndex !== index
-      ? clearStaleKeys<S>(data, resolvedOldOptions[oldIndex], [resolvedOptions[oldIndex], newOption])
-      : data;
-  const sanitized = sanitizeDataForNewSchema<T, S, F>(
-    validator,
-    rootSchema,
-    newOption,
-    oldOption,
-    base,
-    experimental_customMergeAllOf,
-    oldData,
-  );
+  // back, unless the selected option declares it too. Only those keys are cleared, and the data is not sanitized any
+  // further: sanitizing it against the selected option would also replace the values it does not accept, such as a
+  // const or an enum on a key both options declare, erasing what the user entered for the option that is still shown
+  const scoreFlipped = !switched && oldIndex !== undefined && oldIndex !== index;
+  const base = scoreFlipped
+    ? clearStaleKeys<S>(data, resolvedOldOptions[oldIndex], [resolvedOptions[oldIndex], newOption])
+    : data;
+  const sanitized = scoreFlipped
+    ? base
+    : sanitizeDataForNewSchema<T, S, F>(
+        validator,
+        rootSchema,
+        newOption,
+        oldOption,
+        base,
+        experimental_customMergeAllOf,
+        oldData,
+      );
   // Only an object option with `properties` or an array option whose `items` the array branch handles sanitizes the
   // data, a free-form object, a scalar option or an array with tuple or no `items` has nothing to sanitize it against
   const result =

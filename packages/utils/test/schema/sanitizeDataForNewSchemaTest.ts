@@ -207,6 +207,31 @@ export default function sanitizeDataForNewSchemaTest(testValidator: TestValidato
         ).toEqual(typed);
         testValidator.setReturnValues({ isValid: [] });
       });
+      it('keeps a value of the option the old data matched that the selected option would replace on a score flip', () => {
+        // Both options are invalid, as when each misses a required field. Typing into `name` lowers A's score, as its
+        // default no longer matches, and B's `b1` then scores higher. That is no switch, so A's `color`, which B's `enum`
+        // rejects, is kept for when A is shown again
+        const optionA: RJSFSchema = {
+          type: 'object',
+          properties: { name: { type: 'string', default: 'Bob' }, color: { type: 'string' } },
+        };
+        const optionB: RJSFSchema = {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            color: { type: 'string', enum: ['red', 'blue'] },
+            b1: { type: 'string' },
+          },
+        };
+        const schema: RJSFSchema = { oneOf: [optionA, optionB] };
+        const oldData = { name: 'Bob', color: 'green' };
+        const typed = { name: 'Bobx', color: 'green', b1: 'x' };
+        testValidator.setReturnValues({ isValid: Array(50).fill(false) });
+        expect(sanitizeDataForNewSchema(testValidator, schema, schema, schema, typed, undefined, oldData)).toEqual(
+          typed,
+        );
+        testValidator.setReturnValues({ isValid: [] });
+      });
       it('clears what the conditional of the option the old data matched declared for the old data on a score flip', () => {
         // A declares `extraA` only while `name` is "Bob". Typing into `name` makes B score higher, A's fields are kept,
         // but `extraA` is stale, as A shows no `extraA` once it is selected again
