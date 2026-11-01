@@ -614,6 +614,8 @@ describeRepeated('Form common: form state updates', (createFormComponent) => {
   });
 });
 
+// Not in `describeRepeated`: under `liveOmit` the form omits A's `a1` from the data as soon as B scores higher, so the
+// data this test expects to keep cannot be kept there
 describe('Form state updates of a oneOf with a conditional (#5567)', () => {
   it('keeps what was entered for the selected option when typing makes another option score higher', async () => {
     // Typing `x` after `Bob` lowers A's score, as its default no longer matches, so B's `extra` then scores higher.

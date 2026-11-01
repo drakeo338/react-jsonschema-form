@@ -335,18 +335,16 @@ class SchemaUtils<
 
   /** Sanitize the `data` associated with the `oldSchema` so it is considered appropriate for the `newSchema`. If the
    * new schema does not contain any properties, then `undefined` is returned to clear all the form data, unless it is
-   * not an array and has the same `oneOf`/`anyOf` options as the old schema. That data is sanitized against the
-   * selected option instead, or returned as is when there is no `oldData`, when it is not known which option is
-   * selected or when that option has nothing to sanitize against. Due to the nature of schemas, this sanitization
-   * happens recursively for nested objects of data. Also, any properties in the old schemas that are non-existent in
+   * not an array and has the same `oneOf`/`anyOf` options as the old schema: its data is then sanitized against the
+   * selected option, as `sanitizeDataForNewSchema()` describes. Due to the nature of schemas, this sanitization
+   * happens recursively for nested objects of data. Also, any properties in the old schema that are non-existent in
    * the new schema are set to `undefined`.
    *
    * @param [newSchema] - The new schema for which the data is being sanitized
    * @param [oldSchema] - The old schema from which the data originated
    * @param [data] - The form data associated with the schema, treated as an empty object when undefined, except
    *      that it is not sanitized against a `oneOf`/`anyOf` option
-   * @param [oldData] - The form data the `oldSchema` was resolved against. Only used to resolve a `oneOf`/`anyOf`
-   *      option as it was for that data, and without it the data of such an option is returned as is
+   * @param [oldData] - The form data the `oldSchema` was resolved against, used to sanitize a `oneOf`/`anyOf` option
    * @returns - The new form data, with all the fields uniquely associated with the old schema set to `undefined`.
    *      Will return `undefined` if the new schema is not an object containing properties, unless it is not an
    *      array and has the same `oneOf`/`anyOf` options as the old schema

@@ -343,6 +343,116 @@ export default function sanitizeDataForNewSchemaTest(testValidator: TestValidato
           }),
         ).toEqual({ type: 'b', a1: undefined });
       });
+      it('keeps a value that the selected option would replace when the same option stays selected', () => {
+        // `color` accepts any string, but its `anyOf` lists `red` and `blue` first, and `ro` is a `readOnly` field with
+        // a `default`. Typing into `a` keeps A selected, so neither rule may erase what the user entered
+        const color: RJSFSchema = { anyOf: [{ const: 'red' }, { const: 'blue' }, { type: 'string' }] };
+        const ro: RJSFSchema = { type: 'string', readOnly: true, default: 'auto' };
+        const schema: RJSFSchema = {
+          oneOf: [
+            { type: 'object', properties: { color, ro, a: { type: 'string' } } },
+            { type: 'object', properties: { color, ro, b: { type: 'string' } } },
+          ],
+        };
+        const oldData = { color: 'green', ro: 'abc', a: 'x' };
+        const typed = { color: 'green', ro: 'abc', a: 'x2' };
+        testValidator.setReturnValues({ isValid: Array(50).fill(false) });
+        expect(sanitizeDataForNewSchema(testValidator, schema, schema, schema, typed, undefined, oldData)).toEqual(
+          typed,
+        );
+        testValidator.setReturnValues({ isValid: [] });
+      });
+      it('keeps a value that differs from the const of the selected option when the same option stays selected', () => {
+        const schema: RJSFSchema = {
+          oneOf: [
+            { type: 'object', properties: { kind: { type: 'string', const: 'A' }, a: { type: 'string' } } },
+            { type: 'object', properties: { b: { type: 'string' } } },
+          ],
+        };
+        const typed = { kind: 'x', a: 'x2' };
+        testValidator.setReturnValues({ isValid: Array(50).fill(false) });
+        expect(
+          sanitizeDataForNewSchema(testValidator, schema, schema, schema, typed, undefined, { kind: 'x', a: 'x' }),
+        ).toEqual(typed);
+        testValidator.setReturnValues({ isValid: [] });
+      });
+      it('keeps a value that the selected option would replace when the old data singled out no option', () => {
+        // The empty old data fits no option, so there is no option the user switched from. B scores higher for the
+        // data, and its `enum` must not erase the `color` that was entered
+        const schema: RJSFSchema = {
+          oneOf: [
+            {
+              type: 'object',
+              properties: { color: { type: 'string' }, name: { type: 'string' } },
+              additionalProperties: false,
+            },
+            {
+              type: 'object',
+              properties: { color: { type: 'string', enum: ['red', 'blue'] }, size: { type: 'number' } },
+              additionalProperties: false,
+            },
+          ],
+        };
+        const typed = { color: 'green', size: 3 };
+        testValidator.setReturnValues({ isValid: Array(50).fill(false) });
+        expect(sanitizeDataForNewSchema(testValidator, schema, schema, schema, typed, undefined, {})).toEqual(typed);
+        testValidator.setReturnValues({ isValid: [] });
+      });
+      it('keeps what the option still shown declares when the old schema root properties declare it too', () => {
+        // The root `then` declared `note` for the old data, and A, which the old data singled out and which is still
+        // shown after the score flip, declares it as well, so the final clear must not drop it
+        const optionA: RJSFSchema = {
+          type: 'object',
+          properties: { name: { type: 'string', default: 'Bob' }, a1: { type: 'string' }, note: { type: 'string' } },
+        };
+        const optionB: RJSFSchema = {
+          type: 'object',
+          properties: { name: { type: 'string' }, extra: { type: 'string' }, b2: { type: 'string' } },
+        };
+        const options = [optionA, optionB];
+        const oldSchema: RJSFSchema = { type: 'object', properties: { note: { type: 'string' } }, oneOf: options };
+        const newSchema: RJSFSchema = { type: 'object', oneOf: options };
+        const typed = { name: 'Bobx', a1: 'hello', note: 'n', extra: 'e', b2: 'x' };
+        testValidator.setReturnValues({ isValid: Array(50).fill(false) });
+        expect(
+          sanitizeDataForNewSchema(testValidator, newSchema, newSchema, oldSchema, typed, undefined, {
+            name: 'Bob',
+            a1: 'hello',
+            note: 'n',
+            extra: 'e',
+            b2: 'x',
+          }),
+        ).toEqual(typed);
+        testValidator.setReturnValues({ isValid: [] });
+      });
+      it('returns null and scalar data as is, rather than an empty object', () => {
+        const schema: RJSFSchema = {
+          anyOf: [{ type: 'number' }, { type: 'object', properties: { a: { type: 'string', default: 'd' } } }],
+        };
+        expect(sanitizeDataForNewSchema(testValidator, schema, schema, schema, null, undefined, { a: 'd' })).toBeNull();
+        expect(sanitizeDataForNewSchema(testValidator, schema, schema, schema, 'hi', undefined, { a: 'd' })).toBe('hi');
+      });
+      it('clears the fields of a conditional another option declared when the old data tied and a new option const is typed', () => {
+        // The user picked B on a tie and filled `food` through B's conditional, then typed A's `kind`. A's `size` and
+        // B's `food` score alike for the old data, so it singled out no option, but the typed `kind` identifies A, so
+        // what B declared for the old data is cleared
+        const withSize: RJSFSchema = {
+          ...kindA,
+          properties: { ...kindA.properties, size: { type: 'string' } },
+        };
+        const schema: RJSFSchema = { oneOf: [withSize, kindB] };
+        const oldTie = { animal: 'Cat', size: 'S', food: 'meat' };
+        const typed = { kind: 'A', ...oldTie };
+        // An option is valid when its `kind` const holds the `kind` of the data, or the data has none, as a real
+        // validator tells
+        const isValid = (validatedSchema: RJSFSchema, formData: any) =>
+          formData?.kind === undefined || getByPath(validatedSchema, ['properties', 'kind', 'const']) === formData.kind;
+        expect(
+          withIsValid(isValid, () =>
+            sanitizeDataForNewSchema(testValidator, schema, schema, schema, typed, undefined, oldTie),
+          ),
+        ).toEqual({ kind: 'A', animal: 'Cat', size: 'S', food: undefined });
+      });
       it('clears the old schema root properties that the selected option does not declare', () => {
         // The root `then` declared `extra` for the old data only, and the new root schema has no `properties` left
         const options: RJSFSchema[] = [
