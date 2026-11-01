@@ -183,6 +183,32 @@ export default function sanitizeDataForNewSchemaTest(testValidator: TestValidato
           ),
         ).toEqual({ kind: 'A', animal: 'x', food: undefined });
       });
+      it('clears the fields of the option the old data matched when the new option identifying field is typed', () => {
+        // A has no `const` on `kind`, B has. Typing `b` into `kind` makes B score higher, which is the user switching to
+        // B through the data, so A's `extraA` is cleared as it is on a dropdown switch
+        const optionA: RJSFSchema = {
+          type: 'object',
+          properties: { kind: { type: 'string' }, extraA: { type: 'string' } },
+        };
+        const optionB: RJSFSchema = {
+          type: 'object',
+          properties: { kind: { type: 'string', const: 'b' }, size: { type: 'string' } },
+        };
+        const schema: RJSFSchema = { oneOf: [optionA, optionB] };
+        testValidator.setReturnValues({ isValid: Array(50).fill(false) });
+        expect(
+          sanitizeDataForNewSchema(
+            testValidator,
+            schema,
+            schema,
+            schema,
+            { kind: 'b', extraA: '1', size: 'S' },
+            undefined,
+            { kind: 'x', extraA: '1', size: 'S' },
+          ),
+        ).toEqual({ kind: 'b', extraA: undefined, size: 'S' });
+        testValidator.setReturnValues({ isValid: [] });
+      });
       it('keeps the fields of the option the old data matched when no field that identifies it changed', () => {
         // Typing into `name` lowers A's score, as its default no longer matches, and B's `extra` then scores higher.
         // That is no switch of option, so A's `a1` is kept, as when the user picks another option explicitly
