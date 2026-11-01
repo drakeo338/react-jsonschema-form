@@ -18,6 +18,11 @@ import retrieveSchema from './retrieveSchema.ts';
 
 const NO_VALUE = Symbol('no Value');
 
+/** Returns the `value`, with `NO_VALUE` turned into `undefined`, for the callers that clear data nothing sanitized */
+function clearedIfNoValue(value: any) {
+  return value === NO_VALUE ? undefined : value;
+}
+
 function enumValuesForSchema<S extends StrictRJSFSchema = RJSFSchema>(schema: S): any[] | undefined {
   if (Array.isArray(schema.enum)) {
     return schema.enum;
@@ -292,8 +297,9 @@ function sanitizeDataForSelectedOption<
  *       alone, which neither it nor the new option declares for the `data`, are set to `undefined`, and no value is
  *       replaced, as that would erase what the user entered
  *     - When the `oldData` singled out no option, a change of a field that identifies the new option is a switch from
- *       an unknown option, so the keys that any option declared for the `oldData` alone, and the new one does not, are
- *       set to `undefined` as well
+ *       an unknown option: the `data` is sanitized as in the next case, keeping the values the user entered since the
+ *       option they were entered for is not known, and the keys that any option declared for the `oldData` alone, and
+ *       the new one does not, are set to `undefined` as well
  *     - Otherwise, the same option stays selected, or there is no option to have switched from. The `data` is sanitized
  *       from the option resolved against the `oldData` to the one resolved against the `data`, so the keys that its
  *       conditional declared for the `oldData` alone are cleared and a default is filled in for a field it newly
@@ -341,7 +347,7 @@ export default function sanitizeDataForNewSchema<
     oldData,
   );
   // By default, we will clear the form data
-  return (newFormData === NO_VALUE ? undefined : newFormData) as T;
+  return clearedIfNoValue(newFormData) as T;
 }
 
 /** Sanitizes the `data` as `sanitizeDataForNewSchema()` does, except that it returns `NO_VALUE` rather than
@@ -412,15 +418,19 @@ function sanitizeDataOrNoValue<T = any, S extends StrictRJSFSchema = RJSFSchema,
         }
         // If it is an object, we'll recurse and store the resulting sanitized data for the key
         if (newSchemaTypeForKey === 'object' || (newSchemaTypeForKey === 'array' && Array.isArray(formValue))) {
-          // SIDE-EFFECT: process the new schema type of object recursively to save iterations
-          const itemData = sanitizeDataForNewSchema<T, S, F>(
+          // SIDE-EFFECT: process the new schema type of object recursively to save iterations, keeping the entered
+          // values when the caller keeps them, so that a nested `const`, `enum` or `readOnly` rule does not erase them
+          const nestedValue = sanitizeDataOrNoValue<T, S, F>(
             validator,
             rootSchema,
             newKeyedSchema,
             isNewProperty && newSchemaTypeForKey === 'array' ? newKeyedSchema : oldKeyedSchema,
             formValue,
             experimental_customMergeAllOf,
+            undefined,
+            keepEntered,
           );
+          const itemData = clearedIfNoValue(nestedValue);
           if (itemData !== undefined || newSchemaTypeForKey === 'array') {
             // only put undefined values for the array type and not the object type
             nestedData[key] = itemData;
@@ -524,22 +534,27 @@ function sanitizeDataOrNoValue<T = any, S extends StrictRJSFSchema = RJSFSchema,
                   aValue,
                   experimental_customMergeAllOf,
                 );
-            const itemValue = sanitizeDataForNewSchema<T, S, F>(
+            // The entered values of an item are kept when the caller keeps them, as for a nested object
+            const sanitizedItem = sanitizeDataOrNoValue<T, S, F>(
               validator,
               rootSchema,
               newItemSchema,
               oldItemSchema,
               aValue,
               experimental_customMergeAllOf,
+              undefined,
+              keepEntered,
             );
+            const itemValue = clearedIfNoValue(sanitizedItem);
             if (itemValue !== undefined && (maxItems < 0 || newValue.length < maxItems)) {
               newValue.push(itemValue);
             }
             return newValue;
           }, []);
         } else {
-          // Filter out items that are no longer valid in the new items schema (e.g., enum values that changed)
-          const newItemEnumValues = enumValuesForSchema(newSchemaItems as S);
+          // Filter out items that are no longer valid in the new items schema (e.g., enum values that changed), unless
+          // the entered values are kept, as an item the user entered is one of them
+          const newItemEnumValues = keepEntered ? undefined : enumValuesForSchema(newSchemaItems as S);
           const filteredData = newItemEnumValues
             ? data.filter((item: any) => newItemEnumValues.some((v: any) => deepEquals(v, item)))
             : data;

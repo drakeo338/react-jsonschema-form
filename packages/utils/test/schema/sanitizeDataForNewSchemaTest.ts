@@ -376,6 +376,69 @@ export default function sanitizeDataForNewSchemaTest(testValidator: TestValidato
         ).toEqual(typed);
         testValidator.setReturnValues({ isValid: [] });
       });
+      it('keeps a nested value that the selected option would replace when the same option stays selected', () => {
+        // The rules that keep the entered values must reach the properties of a nested object too
+        const schema: RJSFSchema = {
+          oneOf: [
+            {
+              type: 'object',
+              properties: {
+                kind: { type: 'string', const: 'A' },
+                s: {
+                  type: 'object',
+                  properties: {
+                    size: { type: 'string', enum: ['S', 'M'] },
+                    ro: { type: 'string', readOnly: true, default: 'auto' },
+                  },
+                },
+                a: { type: 'string' },
+              },
+            },
+            { type: 'object', properties: { kind: { type: 'string', const: 'B' }, b: { type: 'number' } } },
+          ],
+        };
+        const typed = { kind: 'A', s: { size: 'XL', ro: 'abc' }, a: 'x2' };
+        testValidator.setReturnValues({ isValid: Array(50).fill(false) });
+        expect(
+          sanitizeDataForNewSchema(testValidator, schema, schema, schema, typed, undefined, {
+            kind: 'A',
+            s: { size: 'XL', ro: 'abc' },
+            a: 'x',
+          }),
+        ).toEqual(typed);
+        testValidator.setReturnValues({ isValid: [] });
+      });
+      it('keeps the items of an array that the selected option would drop when the same option stays selected', () => {
+        // The same for the items of an array, whether they are objects with their own `enum` or `enum` values themselves
+        const schema: RJSFSchema = {
+          oneOf: [
+            {
+              type: 'object',
+              properties: {
+                kind: { type: 'string', const: 'A' },
+                items: {
+                  type: 'array',
+                  items: { type: 'object', properties: { size: { type: 'string', enum: ['S'] } } },
+                },
+                tags: { type: 'array', items: { type: 'string', enum: ['S', 'M'] } },
+                a: { type: 'string' },
+              },
+            },
+            { type: 'object', properties: { kind: { type: 'string', const: 'B' }, b: { type: 'number' } } },
+          ],
+        };
+        const typed = { kind: 'A', items: [{ size: 'XL' }], tags: ['XL'], a: 'x2' };
+        testValidator.setReturnValues({ isValid: Array(50).fill(false) });
+        expect(
+          sanitizeDataForNewSchema(testValidator, schema, schema, schema, typed, undefined, {
+            kind: 'A',
+            items: [{ size: 'XL' }],
+            tags: ['XL'],
+            a: 'x',
+          }),
+        ).toEqual(typed);
+        testValidator.setReturnValues({ isValid: [] });
+      });
       it('keeps a value that the selected option would replace when the old data singled out no option', () => {
         // The empty old data fits no option, so there is no option the user switched from. B scores higher for the
         // data, and its `enum` must not erase the `color` that was entered
