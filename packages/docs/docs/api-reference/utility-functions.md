@@ -1801,8 +1801,9 @@ Sanitize the `data` associated with the `oldSchema` so it is considered appropri
 If the new schema does not contain any properties, then `undefined` is returned to clear all the form data.
 The exception is a new schema that is not an array and has the same `oneOf`/`anyOf` options as the old schema, such as a root `oneOf` that is not resolved to an option.
 Its data is sanitized against the selected option: the one the `data` singles out, or else the one the `oldData` singled out.
-Switching to another option by typing a field that identifies it clears the fields of the old option, while a change within the selected option clears only what its own conditional declared for the `oldData` and replaces no value the user entered.
-The data is returned as is when there is no `oldData`, when no option is selected, or when it is not an object or an array.
+When the data moves to another option, by typing a field that identifies it or because that option scores higher as the user types, the fields of the old option are cleared and the values the new option does not accept are replaced, so the data matches the option `MultiSchemaField` shows.
+A change within the selected option clears what its own conditional declared for the `oldData`, what the old schema declares itself and, when the `data` singles out the option, what only another option declares; it fills in the default of a field the option newly declares and keeps a value the user entered unless a conditional within the option changed the schema of its field.
+The data is returned as is when there is no `oldData` or when it is not an object or an array; when no option is selected, only the keys the old schema declares itself that no option declares are set to `undefined`.
 An `undefined` `data` stays `undefined` rather than being sanitized against an option.
 Due to the nature of schemas, this sanitization happens recursively for nested objects of data.
 Also, any properties in the old schema that are non-existent in the new schema are set to `undefined`.

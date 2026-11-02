@@ -7,7 +7,13 @@ import type { Mock } from 'vitest';
 import type { FormProps } from '../src/index.ts';
 import Form from '../src/index.ts';
 import type { NoValFormProps, RerenderType } from './testUtils.tsx';
-import { expectToHaveBeenCalledWithFormData, renderNode, submitForm, describeRepeated } from './testUtils.tsx';
+import {
+  createFormComponent,
+  describeRepeated,
+  expectToHaveBeenCalledWithFormData,
+  renderNode,
+  submitForm,
+} from './testUtils.tsx';
 
 const user = userEvent.setup();
 
@@ -642,4 +648,37 @@ describeRepeated('Form common: form state updates', (createFormComponent) => {
       expectToHaveBeenCalledWithFormData(onChange, { name: 'Bobxyz', extra: 'e' }, 'root_name');
     });
   });
+});
+
+describe('Form state: oneOf/anyOf option picked from the dropdown (#5567)', () => {
+  it.each(['oneOf', 'anyOf'])(
+    'keeps what is typed into the option picked from the dropdown of a %s when the data ties',
+    async (key) => {
+      // `{ name: 'Bob' }` singles out A by its default, and B is picked without a change to the data. Typing into B's
+      // `extra` ties A and B, so the data no longer tells which option is shown, and B's `extra` must stay. Not repeated
+      // with `liveOmit`, as `omitExtraData()` breaks such a tie towards the first option on its own and drops `extra`
+      const schema: RJSFSchema = {
+        [key]: [
+          { title: 'A', type: 'object', properties: { name: { type: 'string', default: 'Bob' } } },
+          {
+            title: 'B',
+            type: 'object',
+            properties: { name: { type: 'string' }, extra: { type: 'string' } },
+            allOf: [
+              { if: { properties: { name: { const: 'Cat' } } }, then: { properties: { food: { type: 'string' } } } },
+            ],
+          },
+        ],
+      };
+      const { node, onChange } = createFormComponent({ ref: createRef(), schema, formData: { name: 'Bob' } });
+      const select = node.querySelector<HTMLSelectElement>(`#root__${key.toLowerCase()}_select`)!;
+
+      await user.selectOptions(select, 'B');
+      await user.type(node.querySelector<HTMLInputElement>('#root_extra')!, 'ef');
+
+      expect(select.value).toBe('1');
+      expect(node.querySelector<HTMLInputElement>('#root_extra')!.value).toBe('ef');
+      expectToHaveBeenCalledWithFormData(onChange, { name: 'Bob', extra: 'ef' }, 'root_extra');
+    },
+  );
 });

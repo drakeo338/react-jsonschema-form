@@ -518,7 +518,7 @@ export default function sanitizeDataForNewSchemaTest(testValidator: TestValidato
           ),
         ).toEqual({ kind: 'A', animal: 'Cat', size: 'S', food: undefined });
       });
-      it('clears a field the new option does not declare on a switch from a tie, even one every option declares', () => {
+      it('clears a field the new option does not declare on a switch from a tie, even one another option always declares', () => {
         // `name` is not conditional data, but once `kind` singles out B, which does not declare it, B is shown without
         // it, as after the same switch from a known A
         const schema: RJSFSchema = {
@@ -553,6 +553,21 @@ export default function sanitizeDataForNewSchemaTest(testValidator: TestValidato
             ),
           ),
         ).toEqual({ animal: 'Cat', name: undefined, extra: 'e', kind: 'b' });
+      });
+      it('keeps what is typed into an option picked from the dropdown when the data ties', () => {
+        // The old data singles out A by its default, and typing into B's `extra` after picking B in the dropdown ties A
+        // and B. Which option is shown is then not known from the data, so B's `extra` must not be cleared as a key of
+        // another option
+        const schema: RJSFSchema = {
+          oneOf: [
+            { type: 'object', properties: { name: { type: 'string', default: 'Bob' } } },
+            { type: 'object', properties: { name: { type: 'string' }, extra: { type: 'string' } } },
+          ],
+        };
+        const typed = { name: 'Bob', extra: 'e' };
+        expect(
+          sanitizeDataForNewSchema(testValidator, schema, schema, schema, typed, undefined, { name: 'Bob' }),
+        ).toEqual(typed);
       });
       it('replaces a value that a conditional within the selected option no longer accepts', () => {
         // B's `food` takes `meat` or `fish` for a cat and only `seeds` otherwise. Changing `animal` keeps B selected, but

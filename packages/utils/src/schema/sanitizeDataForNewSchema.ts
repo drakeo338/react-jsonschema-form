@@ -67,20 +67,24 @@ function xxxOfOptions<S extends StrictRJSFSchema = RJSFSchema>(schema?: S): S[] 
   return Array.isArray(options) ? (options as S[]) : undefined;
 }
 
-/** Clears the keys of the `data` that the `oldSchema` declares in its `properties`, such as through a conditional that
+/** Clears the keys of the `data` that the `oldSchemas` declare in their `properties`, such as through a conditional that
  * no longer applies, unless one of the `schemas` declares them. Only the value of such a key is touched, so the other
  * fields of the `data` are kept as they are.
  *
  * @param data - The form data
- * @param oldSchema - The schema resolved against the old data, whose `properties` may be stale in the `data`
+ * @param oldSchemas - The schemas resolved against the old data, whose `properties` may be stale in the `data`
  * @param schemas - The schemas, resolved against the `data`, whose `properties` are kept
  * @returns - The `data` with the stale keys set to `undefined`, or the `data` as is when there are none
  */
-function clearStaleKeys<S extends StrictRJSFSchema = RJSFSchema>(data: any, oldSchema: S | undefined, schemas: S[]) {
+function clearStaleKeys<S extends StrictRJSFSchema = RJSFSchema>(
+  data: any,
+  oldSchemas: (S | undefined)[],
+  schemas: S[],
+) {
   const staleKeys = isObject(data)
-    ? Object.keys(oldSchema?.[PROPERTIES_KEY] ?? {}).filter(
-        (key) => data[key] !== undefined && !schemas.some((schema) => hasByPath(schema, [PROPERTIES_KEY, key])),
-      )
+    ? oldSchemas
+        .flatMap((oldSchema) => Object.keys(oldSchema?.[PROPERTIES_KEY] ?? {}))
+        .filter((key) => data[key] !== undefined && !schemas.some((schema) => hasByPath(schema, [PROPERTIES_KEY, key])))
     : [];
   return staleKeys.length > 0 ? { ...data, ...Object.fromEntries(staleKeys.map((key) => [key, undefined])) } : data;
 }
@@ -97,8 +101,9 @@ function clearStaleKeys<S extends StrictRJSFSchema = RJSFSchema>(data: any, oldS
  * @param [experimental_customMergeAllOf] - Optional function that allows for custom merging of `allOf` schemas
  * @param [oldData] - The form data the old schema was resolved against
  * @param [oldSchema] - The old schema, whose own `properties` are cleared when the selected option does not declare them
- * @returns - The `data` sanitized against the selected option, or the `data` as is when there is no `oldData`, when the
- *      selected option is not known or when it has nothing to sanitize against
+ * @returns - The `data` sanitized against the selected option, or the `data` as is when there is no `oldData` or when the
+ *      selected option has nothing to sanitize against. When the selected option is not known, only the keys the
+ *      `oldSchema` declares itself that no option declares are set to `undefined`
  */
 function sanitizeDataForSelectedOption<
   T = any,
@@ -136,10 +141,11 @@ function sanitizeDataForSelectedOption<
   const resolvedOptions = resolveOptions(data);
   const resolvedOldOptions = resolveOptions(oldData);
   const oldIndex = singledOutOption(oldData, resolvedOldOptions);
-  const index = singledOutOption(data, resolvedOptions) ?? oldIndex;
+  const dataIndex = singledOutOption(data, resolvedOptions);
+  const index = dataIndex ?? oldIndex;
   if (index === undefined) {
     // Whichever option is selected, the keys the old schema declares itself that no option declares are stale
-    return clearStaleKeys<S>(data, oldSchema, resolvedOptions);
+    return clearStaleKeys<S>(data, [oldSchema], resolvedOptions);
   }
   const newOption = resolvedOptions[index];
   const moved = oldIndex !== undefined && oldIndex !== index;
@@ -156,14 +162,13 @@ function sanitizeDataForSelectedOption<
     oldData,
     !moved,
   );
-  // The keys that any other option declared for the old data, and those the old schema declares itself, such as through
-  // a conditional that no longer applies, are cleared unless the selected option declares them, even a key every option
-  // declares whatever the data: whichever option they were entered for, the selected option does not show them
-  const result: any = sanitized === NO_VALUE ? data : sanitized;
-  return [...resolvedOldOptions, oldSchema].reduce(
-    (cleared, oldOption) => clearStaleKeys<S>(cleared, oldOption, [newOption]),
-    result,
-  );
+  // The keys the old schema declares itself, such as through a conditional that no longer applies, are cleared unless
+  // the selected option declares them. So are the keys any other option declared for the old data, even a key another
+  // option declares whatever the data, not only through a conditional, since the selected option does not show them, but
+  // only when the data singles that option out: on a tie the user may be on any option, such as one just picked from the dropdown, whose fields
+  // must stay
+  const staleSchemas = dataIndex === undefined ? [oldSchema] : [...resolvedOldOptions, oldSchema];
+  return clearStaleKeys<S>(sanitized === NO_VALUE ? data : sanitized, staleSchemas, [newOption]);
 }
 
 /** Sanitize the `data` associated with the `oldSchema` so it is considered appropriate for the `newSchema`. If the new
@@ -215,8 +220,9 @@ function sanitizeDataForSelectedOption<
  *     singled out instead, since `MultiSchemaField` keeps the option it had when the data does not single out one
  *   - If neither singled out an option, return the `data` as is, since which option is selected cannot be told from it,
  *     except for the keys of the `oldSchema` properties that no option declares, which are set to `undefined`
- *   - Otherwise, the option the `data` singles out is the one `MultiSchemaField` shows, whether the user switched to it
- *     by typing a field that identifies it or another option scored higher mid-edit, so the `data` is made to match it:
+ *   - Otherwise, the option singled out, by the `data` or else by the `oldData`, is the one `MultiSchemaField` shows,
+ *     whether the user switched to it by typing a field that identifies it or another option scored higher mid-edit, so
+ *     the `data` is made to match it:
  *     - When the `data` moved to another option than the one the `oldData` singled out, recursively sanitize the `data`
  *       from the old option, resolved against the `oldData`, to the new one, so the fields of the old option are
  *       cleared and the values the new option does not accept are replaced
@@ -228,9 +234,12 @@ function sanitizeDataForSelectedOption<
  *       within the option no longer accepts is replaced, as it is at a plain root
  *     - An array `data` is sanitized by the array branch above. A selected option with nothing to sanitize against, such
  *       as a free-form object, a scalar option or an array option with tuple or no `items`, leaves the `data` as is
- *     - Last, the keys that any other option declares for the `oldData`, or that the `oldSchema` declares itself, such
- *       as through a conditional that no longer applies, are set to `undefined` unless the new option declares them,
- *       even a key every option declares whatever the data, since the new option does not show them
+ *     - Last, the keys that the `oldSchema` declares itself, such as through a conditional that no longer applies, are
+ *       set to `undefined` unless the new option declares them. So are the keys that any other option declares for the
+ *       `oldData`, even a key another option declares whatever the data, not only through a conditional, since the new
+ *       option does not show them, but
+ *       only when the `data` singles out the new option: when the option the `oldData` singled out is used instead, the
+ *       user may be on any option, such as one just picked from the dropdown, so the fields of the others stay
  * - Otherwise return `undefined`
  *
  * @param validator - An implementation of the `ValidatorType` interface that will be used when necessary
@@ -414,7 +423,6 @@ function sanitizeDataOrNoValue<T = any, S extends StrictRJSFSchema = RJSFSchema,
       !Array.isArray(oldSchemaItems) &&
       !Array.isArray(newSchemaItems)
     ) {
-      // The array branch handles the data from here on, so the data is cleared unless it is sanitized below
       newFormData = undefined;
       // Keep the raw (pre-resolution) items schema around: a conditional nested inside `items` must be
       // re-resolved per element below, against that element's own value, rather than the whole array (#5250)
@@ -459,7 +467,6 @@ function sanitizeDataOrNoValue<T = any, S extends StrictRJSFSchema = RJSFSchema,
                   aValue,
                   experimental_customMergeAllOf,
                 );
-            // The entered values of an item are kept when the caller keeps them, as for a nested object
             const sanitizedItem = sanitizeDataOrNoValue<T, S, F>(
               validator,
               rootSchema,
@@ -495,7 +502,9 @@ function sanitizeDataOrNoValue<T = any, S extends StrictRJSFSchema = RJSFSchema,
     }
     // Also probably want to deal with `prefixItems` as tuples with the latest 2020 draft
   }
-  // An array schema that produced no data above is cleared, whatever its `oneOf`/`anyOf`, and so is the absence of data
+  // A `type: 'array'` schema the array branch did not handle, such as one with tuple or no `items` of its own, is still
+  // cleared: the option path would return as is the data it cannot sanitize, an object or a string under that type among
+  // them. Absent data is not sanitized against an option either
   if (newFormData === NO_VALUE && newSchema?.type !== 'array' && data !== undefined) {
     // Options that are the same on both sides mean the data changed within one `oneOf`/`anyOf`, rather than an option
     // switch (which passes the two resolved options) or a schema change, so its selected option is what to keep
