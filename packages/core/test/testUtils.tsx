@@ -64,10 +64,7 @@ interface FormExtraProps {
 
 /* Run a group of tests with each combination of omitExtraData and liveOmit as form props.
  */
-export function describeRepeated(
-  title: string,
-  fn: (creatorFn: typeof createFormComponent, formExtraProps: FormExtraProps) => void,
-) {
+export function describeRepeated(title: string, fn: (creatorFn: typeof createFormComponent) => void) {
   const formExtraPropsList: FormExtraProps[] = [
     { omitExtraData: false },
     { omitExtraData: true },
@@ -76,7 +73,7 @@ export function describeRepeated(
   ];
   for (const formExtraProps of formExtraPropsList) {
     const createFormComponentFn = (props: NoValFormProps) => createFormComponent({ ...props, ...formExtraProps });
-    describe(`${title} ${JSON.stringify(formExtraProps)}`, () => fn(createFormComponentFn, formExtraProps));
+    describe(`${title} ${JSON.stringify(formExtraProps)}`, () => fn(createFormComponentFn));
   }
 }
 

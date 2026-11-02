@@ -11,7 +11,7 @@ import { expectToHaveBeenCalledWithFormData, renderNode, submitForm, describeRep
 
 const user = userEvent.setup();
 
-describeRepeated('Form common: form state updates', (createFormComponent, { liveOmit }) => {
+describeRepeated('Form common: form state updates', (createFormComponent) => {
   describe('Required and optional fields', () => {
     const schema: RJSFSchema = {
       definitions: {
@@ -605,9 +605,10 @@ describeRepeated('Form common: form state updates', (createFormComponent, { live
       expectToHaveBeenCalledWithFormData(onChange, { name: 'x' }, 'root_name');
       expect(onChange.mock.lastCall![0].formData).not.toHaveProperty('pet');
     });
-    it('keeps what was entered for the selected option when typing makes another option score higher', async () => {
-      // Typing `x` after `Bob` lowers A's score, as its default no longer matches, so B's `extra` then scores higher.
-      // The user did not switch option, so A's `a1` is kept and shown again once the `x` is deleted
+    it('clears what was entered for the old option when typing makes another option score higher', async () => {
+      // Typing `x` after `Bob` lowers A's score, as its default no longer matches, so B's `extra` then scores higher and
+      // the dropdown moves to B. The data follows what is shown: A's `a1` is cleared rather than submitted as hidden
+      // data, and B stays selected while typing on
       const schema: RJSFSchema = {
         oneOf: [
           {
@@ -630,18 +631,15 @@ describeRepeated('Form common: form state updates', (createFormComponent, { live
         schema,
         formData: { name: 'Bob', a1: 'hello', extra: 'e' },
       });
-
-      // Sanitizing keeps `a1`, but with `liveOmit: true` the form then omits, on the same change, what the option that
-      // scores higher does not declare: A's `a1` while B scores higher, then B's `extra` once A scores higher again
-      const liveOmits = liveOmit === true;
+      const select = node.querySelector<HTMLSelectElement>('#root__oneof_select')!;
 
       await user.type(node.querySelector<HTMLInputElement>('#root_name')!, 'x');
-      const typed = liveOmits ? { name: 'Bobx', extra: 'e' } : { name: 'Bobx', a1: 'hello', extra: 'e' };
-      expectToHaveBeenCalledWithFormData(onChange, typed, 'root_name');
+      expect(select.value).toBe('1');
+      expectToHaveBeenCalledWithFormData(onChange, { name: 'Bobx', extra: 'e' }, 'root_name');
 
-      await user.type(node.querySelector<HTMLInputElement>('#root_name')!, '{Backspace}');
-      const deleted = liveOmits ? { name: 'Bob' } : { name: 'Bob', a1: 'hello', extra: 'e' };
-      expectToHaveBeenCalledWithFormData(onChange, deleted, 'root_name');
+      await user.type(node.querySelector<HTMLInputElement>('#root_name')!, 'yz');
+      expect(select.value).toBe('1');
+      expectToHaveBeenCalledWithFormData(onChange, { name: 'Bobxyz', extra: 'e' }, 'root_name');
     });
   });
 });

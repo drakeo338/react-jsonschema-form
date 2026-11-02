@@ -2,7 +2,6 @@ import { ANY_OF_KEY, CONST_KEY, DEFAULT_KEY, ONE_OF_KEY, PROPERTIES_KEY } from '
 import deepEquals from '../deepEquals.ts';
 import getDiscriminatorFieldFromSchema from '../getDiscriminatorFieldFromSchema.ts';
 import getPropertySchema from '../getPropertySchema.ts';
-import isConstant from '../isConstant.ts';
 import isObject from '../isObject.ts';
 import { getByPath, hasByPath } from '../pathUtils.ts';
 import type {
@@ -18,7 +17,6 @@ import retrieveSchema from './retrieveSchema.ts';
 
 const NO_VALUE = Symbol('no Value');
 
-/** Returns the `value`, with `NO_VALUE` turned into `undefined`, for the callers that clear data nothing sanitized */
 function clearedIfNoValue(value: any) {
   return value === NO_VALUE ? undefined : value;
 }
@@ -67,47 +65,6 @@ function replacementForInvalidEnumValue<S extends StrictRJSFSchema = RJSFSchema>
 function xxxOfOptions<S extends StrictRJSFSchema = RJSFSchema>(schema?: S): S[] | undefined {
   const options = schema?.[ANY_OF_KEY] ?? schema?.[ONE_OF_KEY];
   return Array.isArray(options) ? (options as S[]) : undefined;
-}
-
-/** Returns the paths of the fields of the `option` that identify it: the discriminator field of the schema holding the
- * options, and the properties the `option` gives a `const` or a single-value `enum`, as
- * `getOptionMatchingSimpleDiscriminator()` matches on
- *
- * @param option - The option whose identifying fields are wanted
- * @param discriminator - The path of the discriminator field of the schema holding the options, if any
- * @returns - The paths of the fields that identify the `option`
- */
-function identifyingFields<S extends StrictRJSFSchema = RJSFSchema>(option: S, discriminator?: string) {
-  // Each property name is a single path segment, even one with a `.` in it, while the discriminator is a path
-  const paths: (string | string[])[] = Object.entries({ ...option[PROPERTIES_KEY] })
-    .filter(([, propertySchema]) => isObject(propertySchema) && isConstant(propertySchema as S))
-    .map(([key]) => [key]);
-  if (discriminator) {
-    paths.push(discriminator);
-  }
-  return paths;
-}
-
-/** Tells whether the `data` differs from the `oldData` in a field that identifies one of the `options`, such as the
- * discriminator field of the schema holding the options. Such a change is the user switching to another option through
- * the data, by typing the value that identifies the one to leave or the one to go to, rather than a change within the
- * option that scores another option higher, which can happen mid-edit.
- *
- * @param options - The options whose identifying fields are compared, resolved against the data they come from
- * @param discriminator - The path of the discriminator field of the schema holding the options, if any
- * @param data - The form data
- * @param oldData - The form data the old schema was resolved against
- * @returns - True when a field identifying one of the `options` has another value in the `data` than in the `oldData`
- */
-function changedIdentifyingField<S extends StrictRJSFSchema = RJSFSchema>(
-  options: S[],
-  discriminator: string | undefined,
-  data: any,
-  oldData: any,
-): boolean {
-  return options
-    .flatMap((option) => identifyingFields<S>(option, discriminator))
-    .some((path) => !deepEquals(getByPath(data, path), getByPath(oldData, path)));
 }
 
 /** Clears the keys of the `data` that the `oldSchema` declares in its `properties`, such as through a conditional that
@@ -186,56 +143,27 @@ function sanitizeDataForSelectedOption<
   }
   const newOption = resolvedOptions[index];
   const moved = oldIndex !== undefined && oldIndex !== index;
-  // The fields of the option the old data singled out are cleared only when the user switched to another option by
-  // changing a field that identifies the old option or the new one. Otherwise another option scoring higher, as it can
-  // mid-edit, would erase what was entered for the option the user is still on, which `MultiSchemaField` shows again
-  // once the score flips back
-  const identifierChanged = changedIdentifyingField<S>(
-    oldIndex === undefined ? [newOption] : [resolvedOldOptions[oldIndex], newOption],
-    discriminator,
+  // A move to another option is sanitized as a switch whether the user switched or another option scored higher
+  // mid-edit: `MultiSchemaField` shows the option that scores higher, so the fields of the old option would otherwise be
+  // hidden data that is submitted. Within one option the entered values are kept, where their schema did not change
+  const sanitized = sanitizeDataOrNoValue<T, S, F>(
+    validator,
+    rootSchema,
+    newOption,
+    resolvedOldOptions[oldIndex ?? index],
     data,
+    experimental_customMergeAllOf,
     oldData,
+    !moved,
   );
-  // The options kept by the final clear of the keys the old schema declares itself
-  let keptOptions = [newOption];
-  let result: any;
-  if (moved && !identifierChanged) {
-    // The score flipped, so the option the old data singled out is still shown: its fields are kept, and what its own
-    // conditional declared only for the old data is stale, unless the selected option declares it too. Only those keys
-    // are cleared, as sanitizing against the selected option would also replace the values it does not accept, such as
-    // a const or an enum on a key both options declare, erasing what the user entered
-    keptOptions = [newOption, resolvedOptions[oldIndex]];
-    result = clearStaleKeys<S>(data, resolvedOldOptions[oldIndex], keptOptions);
-  } else {
-    // Sanitized from the option the old data singled out when the user switched to the new one, so the values the new
-    // option does not accept are replaced. Within one option, or with no option to have switched from, only what the
-    // conditional of the option declared for the old data is cleared and a default is filled in for a field it newly
-    // declares, while a value the user entered is kept. Only an object option with `properties` or an array option whose
-    // `items` the array branch handles sanitizes the data, a free-form object, a scalar option or an array with tuple
-    // or no `items` has nothing to sanitize it against
-    const sanitized = sanitizeDataOrNoValue<T, S, F>(
-      validator,
-      rootSchema,
-      newOption,
-      resolvedOldOptions[moved ? oldIndex : index],
-      data,
-      experimental_customMergeAllOf,
-      oldData,
-      !moved,
-    );
-    result = sanitized === NO_VALUE ? data : sanitized;
-    if (oldIndex === undefined && identifierChanged) {
-      // The old data singled out no option, but a field that identifies the new option changed, so the user switched to
-      // it. Which option was left is not known, so what any option declared for the old data alone is cleared too
-      result = resolvedOldOptions.reduce(
-        (cleared, oldOption) => clearStaleKeys<S>(cleared, oldOption, [newOption]),
-        result,
-      );
-    }
-  }
-  // The keys the old schema declares itself, such as through a conditional that no longer applies, are cleared too
-  // unless the selected option, or the option that is still shown, declares them
-  return clearStaleKeys<S>(result, oldSchema, keptOptions);
+  // The keys that any other option declared for the old data, and those the old schema declares itself, such as through
+  // a conditional that no longer applies, are cleared unless the selected option declares them, even a key every option
+  // declares whatever the data: whichever option they were entered for, the selected option does not show them
+  const result: any = sanitized === NO_VALUE ? data : sanitized;
+  return [...resolvedOldOptions, oldSchema].reduce(
+    (cleared, oldOption) => clearStaleKeys<S>(cleared, oldOption, [newOption]),
+    result,
+  );
 }
 
 /** Sanitize the `data` associated with the `oldSchema` so it is considered appropriate for the `newSchema`. If the new
@@ -287,28 +215,22 @@ function sanitizeDataForSelectedOption<
  *     singled out instead, since `MultiSchemaField` keeps the option it had when the data does not single out one
  *   - If neither singled out an option, return the `data` as is, since which option is selected cannot be told from it,
  *     except for the keys of the `oldSchema` properties that no option declares, which are set to `undefined`
- *   - Otherwise, the `data` moved to another option than the one the `oldData` singled out when the two differ. It is a
- *     switch when a field that identifies the old or the new option changed, that is the discriminator or a property
- *     with a `const` or a single-value `enum`, as `getOptionMatchingSimpleDiscriminator()` matches on, rather than a
- *     score that flips mid-edit. Then:
- *     - On a switch, recursively sanitize the `data` from the old option, resolved against the `oldData`, to the new
- *       one, so the fields of the old option are cleared and the values the new option does not accept are replaced
- *     - On a score flip, the user is still on the old option: only the keys its conditional declared for the `oldData`
- *       alone, which neither it nor the new option declares for the `data`, are set to `undefined`, and no value is
- *       replaced, as that would erase what the user entered
- *     - When the `oldData` singled out no option, a change of a field that identifies the new option is a switch from
- *       an unknown option: the `data` is sanitized as in the next case, keeping the values the user entered since the
- *       option they were entered for is not known, and the keys that any option declared for the `oldData` alone, and
- *       the new one does not, are set to `undefined` as well
- *     - Otherwise, the same option stays selected, or there is no option to have switched from. The `data` is sanitized
- *       from the option resolved against the `oldData` to the one resolved against the `data`, so the keys that its
- *       conditional declared for the `oldData` alone are cleared and a default is filled in for a field it newly
- *       declares, but a value the user entered is kept, even when it is not an `enum` or `const` value, or is not the
- *       `default` of a `readOnly` field
- *     - An array `data` is sanitized by the array branch above, unless the score flipped
- *     - Last, the keys of the `oldSchema` properties that neither the new option nor, on a score flip, the old option
- *       declares are set to `undefined`. A selected option with nothing to sanitize against, such as a free-form
- *       object, a scalar option or an array option with tuple or no `items`, leaves the `data` as is
+ *   - Otherwise, the option the `data` singles out is the one `MultiSchemaField` shows, whether the user switched to it
+ *     by typing a field that identifies it or another option scored higher mid-edit, so the `data` is made to match it:
+ *     - When the `data` moved to another option than the one the `oldData` singled out, recursively sanitize the `data`
+ *       from the old option, resolved against the `oldData`, to the new one, so the fields of the old option are
+ *       cleared and the values the new option does not accept are replaced
+ *     - Otherwise, the same option stays selected, or the `oldData` singled out none. The `data` is sanitized from the
+ *       option resolved against the `oldData` to the one resolved against the `data`, so the keys that its conditional
+ *       declared for the `oldData` alone are cleared and a default is filled in for a field it newly declares. A value
+ *       the user entered is kept, even when it is not an `enum` or `const` value, or is not the `default` of a
+ *       `readOnly` field, as long as the schema of its field is what it was entered against; a value that a conditional
+ *       within the option no longer accepts is replaced, as it is at a plain root
+ *     - An array `data` is sanitized by the array branch above. A selected option with nothing to sanitize against, such
+ *       as a free-form object, a scalar option or an array option with tuple or no `items`, leaves the `data` as is
+ *     - Last, the keys that any other option declares for the `oldData`, or that the `oldSchema` declares itself, such
+ *       as through a conditional that no longer applies, are set to `undefined` unless the new option declares them,
+ *       even a key every option declares whatever the data, since the new option does not show them
  * - Otherwise return `undefined`
  *
  * @param validator - An implementation of the `ValidatorType` interface that will be used when necessary
@@ -356,9 +278,10 @@ export default function sanitizeDataForNewSchema<
  * `undefined` result is then the array branch choosing to clear the data, because the type of the `items` changed.
  * The parameters and the sanitizing are those of `sanitizeDataForNewSchema()`, except for `keepEntered`.
  *
- * @param [keepEntered] - When true, a value the `data` holds for a property of the `newSchema` is never cleared or
- *      replaced because it is not a `const`, an `enum` value or the `default` of a `readOnly` property, as it may be
- *      what the user entered
+ * @param [keepEntered] - When true, a value the `data` holds for a property whose schema is the same in the `oldSchema`
+ *      and the `newSchema` is never cleared or replaced because it is not a `const`, an `enum` value or the `default` of
+ *      a `readOnly` property, as it may be what the user entered. A property whose schema changed, such as through a
+ *      conditional that flipped, is sanitized as usual, since the value may no longer be accepted
  */
 function sanitizeDataOrNoValue<T = any, S extends StrictRJSFSchema = RJSFSchema, F extends FormContextType = any>(
   validator: ValidatorType<T, S, F>,
@@ -438,14 +361,16 @@ function sanitizeDataOrNoValue<T = any, S extends StrictRJSFSchema = RJSFSchema,
         } else {
           // Ok, the non-object types match, let's make sure that a default or a const of a different value is replaced
           // with the new default or const. This allows the case where two schemas differ that only by the default/const
-          // value to be properly selected
+          // value to be properly selected. An entered value is kept only while its schema is what it was entered against,
+          // as a conditional that flipped within the option may reject it now, as it would at a plain root
+          const keepValue = keepEntered && deepEquals(oldKeyedSchema, newKeyedSchema);
           const newOptionDefault = getByPath(newKeyedSchema, DEFAULT_KEY, NO_VALUE);
           const oldOptionDefault = getByPath(oldKeyedSchema, DEFAULT_KEY, NO_VALUE);
           if (newOptionDefault !== NO_VALUE && newOptionDefault !== formValue) {
             if ((isNewProperty && formValue === undefined) || oldOptionDefault === formValue) {
               // Initialize a newly entered property or replace an old default with the new default.
               removeOldSchemaData[key] = newOptionDefault;
-            } else if (!keepEntered && newKeyedSchema.readOnly === true) {
+            } else if (!keepValue && newKeyedSchema.readOnly === true) {
               // If the new schema has the default set to read-only, treat it like a const and remove the value
               removeOldSchemaData[key] = undefined;
             }
@@ -457,12 +382,12 @@ function sanitizeDataOrNoValue<T = any, S extends StrictRJSFSchema = RJSFSchema,
             // Since this is a const, if the old value matches, replace the value with the new const otherwise clear it
             if (oldOptionConst === formValue) {
               removeOldSchemaData[key] = newOptionConst;
-            } else if (!keepEntered) {
+            } else if (!keepValue) {
               removeOldSchemaData[key] = undefined;
             }
           }
 
-          if (!keepEntered && hasByPath(data, key)) {
+          if (!keepValue && hasByPath(data, key)) {
             const enumReplacement = replacementForInvalidEnumValue(newKeyedSchema, formValue);
             if (enumReplacement !== NO_VALUE) {
               removeOldSchemaData[key] = enumReplacement;
@@ -553,8 +478,11 @@ function sanitizeDataOrNoValue<T = any, S extends StrictRJSFSchema = RJSFSchema,
           }, []);
         } else {
           // Filter out items that are no longer valid in the new items schema (e.g., enum values that changed), unless
-          // the entered values are kept, as an item the user entered is one of them
-          const newItemEnumValues = keepEntered ? undefined : enumValuesForSchema(newSchemaItems as S);
+          // the entered values are kept and the items schema is what they were entered against
+          const newItemEnumValues =
+            keepEntered && deepEquals(oldSchemaItems, newSchemaItems)
+              ? undefined
+              : enumValuesForSchema(newSchemaItems as S);
           const filteredData = newItemEnumValues
             ? data.filter((item: any) => newItemEnumValues.some((v: any) => deepEquals(v, item)))
             : data;
